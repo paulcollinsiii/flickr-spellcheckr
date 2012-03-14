@@ -2,9 +2,8 @@
 '''
 
 import flickrapi
-import logging
-from flickr_spellr.utils.exceptions import InvalidState
 import time
+import datetime
 
 APIKEY = 'b60fd0ba95f8c583d8ef513d060c68e8'
 APISECRET = '9479730e8bc2c49a'
@@ -24,11 +23,15 @@ class SimplePhoto(object):
         self.title = title
         self.description = description
         self.photo_id = photo_id
+    
+    def __unicode__(self):
+        return u'Title: %(title)s\nDescription: %(description)s' % self.__dict__
+    
+    def __str__(self):
+        return 'Title: %(title)s\nDescription: %(description)s' % self.__dict__
 
 
 class Flickr(object):
-    LOGGER = logging.getLogger('flickr.Flickr')
-
     def __init__(self):
         '''Handle querying and iterating over resultant photo data
         
@@ -59,7 +62,7 @@ class Flickr(object):
             return finish_login
         finish_login()
 
-    def photos_iter(self, date_from, date_to=None):
+    def photos_iter(self, date_from=None, date_to=None):
         '''Return an iterator over flickr photos and handle all pagination
         
         The search will only return photos owned by the logged in user.
@@ -72,11 +75,11 @@ class Flickr(object):
         def get_photos_element(resp):
             photos = resp.getchildren()
             if len(photos) != 1:
-                raise InvalidState('Flickr XML response in unexpected format')
+                raise ValueError('Flickr XML response in unexpected format')
             photos = photos[0]
             for key in ('page', 'pages', 'total'):
                 if key not in photos.attrib:
-                    raise InvalidState('Flickr XML response in unexpected '
+                    raise ValueError('Flickr XML response in unexpected '
                                        'format')
             return photos
 
@@ -84,19 +87,18 @@ class Flickr(object):
             for photo in photos.getchildren():
                 for key in ('title', 'id'):
                     if key not in photo.attrib:
-                        raise InvalidState('Flickr XML response in unexpected '
+                        raise ValueError('Flickr XML response in unexpected '
                                            'format')
                 children = photo.getchildren()
                 if len(children) != 1:
-                    raise InvalidState('Flickr XML response in unexpected '
+                    raise ValueError('Flickr XML response in unexpected '
                                        'format')
                 yield SimplePhoto(title=photo.attrib['title'],
                                   description=children[0].text,
                                   photo_id=photo.attrib['id'])
-
-        self.LOGGER.debug('photos_search : %s %s', date_from, date_to)
+        if date_from is None:
+            date_from = datetime.datetime.utcnow() - datetime.timedelta(days=40)
         assert self.logged_in, 'Must be logged in to flickr to search own photos'
-        #TODO: Convert datetimes to unix timestamps
         search_args = {'min_taken_date': time.mktime(date_from.timetuple()),
                        'user_id': 'me',
                        'extras': 'description',
@@ -108,9 +110,12 @@ class Flickr(object):
             yield simplephoto
         #TODO: Renable multi page support
 #        if photos.attrib['pages'] != '1':
-#            self.LOGGER.info('Flickr image search returned %s pages of '
-#                             'results...', photos.attrib['pages'])
 #        for idx in xrange(2,int(photos.attrib['pages']) + 1):
 #            resp = self._flickr.photos_search(page=idx, **kwargs)
 #            photos = get_photos_element(resp)
+
+    def save_meta(self, photo):
+        self._flickr.photos_setMeta(photo_id=photo.photo_id,
+                                    title=photo.title,
+                                    description=photo.description)
 
