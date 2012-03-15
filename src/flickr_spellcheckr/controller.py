@@ -1,18 +1,28 @@
-'''Manage the spellchecking flow of flickr photos
+# -*- coding: UTF-8 -*-
+
+'''
+flickr_spellcheckr.controller
+=============================
+
+Manage the spellchecking flow of flickr photos. The first version of this is
+a fairly basic command line interface.
 '''
 
 from cmd import Cmd
-import datetime
 from flickr_spellcheckr.utils import flickr
+import datetime
+
 
 class Controller(Cmd):
-    '''Simple command processor example.'''
 
-    def __init__(self, speller, flickr, completekey='tab', stdin=None, stdout=None):
-        '''
-        
-        :param flickr: :obj:`~flickr.Flickr` object to handle comm w/ Flickr
-        :param speller: :obj:`~speller.Speller` object to handle spellchecking
+    def __init__(self, speller, flickr, completekey='tab', stdin=None,
+                 stdout=None):
+        '''Simple command line processor of the flickr spell checker.
+
+        :param flickr: :obj:`~flickr_spellchecker.utils.flickr.Flickr` object
+            to handle comm w/ Flickr
+        :param speller: :obj:`~enchant.checker.SpellChecker` object to handle
+            spellchecking
         '''
 
         self.flickr = flickr
@@ -22,6 +32,11 @@ class Controller(Cmd):
 
     def correct_photos(self, date_from=None, date_to=None):
         '''Return a list of photos with the spelling corrected
+
+        :keyword date_from: The :obj:`datetime.datetime` to search from
+        :keyword date_to: The :obj:`datetime.datetime` to search to
+        :returns: List of :obj:`~flickr_spellchecker.utils.flickr.SimplePhoto`
+            objects that have been edited
         '''
 
         print >> self.stdout, "Logging into flickr..."
@@ -32,31 +47,37 @@ class Controller(Cmd):
             logged_in()
         print >> self.stdout, "Searching for photos..."
         corrected_photos = []
-        for photo in self.flickr.photos_iter(date_from=date_from, date_to=date_to):
+        for photo in self.flickr.photos_iter(date_from=date_from,
+                                             date_to=date_to):
             save_photo = False  # Track if we have modified a photo at all
             for key in ('title', 'description'):
                 self.speller.set_text(getattr(photo, key))
                 for err in self.speller:
                     keep_going, updated = (self
                        ._read_spellchecker_command(err, getattr(photo, key)))
-                    if updated:
-                        save_photo = True
-                        setattr(photo, key, self.speller.get_text())
+                    save_photo |= updated  # Binary or with updated (save true)
                     if not keep_going:  # Stop if the user says 'q'
                         break
+                # Save the updated text from this key after checking for errors
+                if save_photo:
+                    setattr(photo, key, self.speller.get_text())
+            # Only append the photo to the corrected_photos queue once
             if save_photo:
                 corrected_photos.append(photo)
         return corrected_photos
 
     def do_showchanges(self, _ignored):
+        '''Show the list of photos that need to be saved to Flickr
+        '''
+
         for photo in self.photos:
             print photo, '\n'
 
     def do_savechanges(self, _ignored):
         '''For each photo with spelling corrections go and save the changes
-        
-        Note that after this finishes saving all the photos meta data the list
-        of photos to update will be cleared.
+
+        Note that after this finishes saving all the photos, the list of photos
+        to update will be cleared.
         '''
 
         for photo in self.photos:
@@ -65,32 +86,38 @@ class Controller(Cmd):
 
     def do_spellcheck(self, dates):
         '''spellcheck [date from] [date to]
+
         Search your photostream for photos TAKEN (not posted) between the
         given dates. If left blank the defaults are from 40 days ago to the
         present.
+
         Dates need to be in the format MM/DD/YYYY e.g. 01/14/2012
         '''
 
-        # First find the photos that we need to check
+        # 1) First find the photos that we need to check
         date_range = []
         try:
-            for date in dates.split(' '):  # Split it up so we can a from and to range
+            for date in dates.split(' '):  # Try to get a from and to range
                 if date == '':
                     continue
                 date_range.append(datetime.datetime.strptime(date, '%m/%d/%Y'))
         except ValueError, e:
             print >> self.stdout, e, 'Processing has been aborted'
             return
-        # Then call someone else to do the spell checking on each photo
+        # 2) Then call someone else to do the spell checking on each photo
         # and then save that list of corrected photos
         self.photos.extend(self.correct_photos(*date_range))
 
     def _spellchecker_help(self):
-        print >> self.stdout, '\n'.join(("0..N:    replace with the numbered suggestion",
+        '''Just prints out the help text for using the spelling corrector
+        '''
+
+        print >> self.stdout, '\n'.join((
+           "0..N:    replace with the numbered suggestion",
            "R0..rN:  always replace with the numbered suggestion",
            "i:       ignore this wordv",
            "I:       always ignore this word",
-           "a:       add word to personal dictionary",
+           "a:       add word to personal dictionary (only for this session)",
            "e:       edit the word",
            "q:       quit checking",
            "h:       print this help message",
@@ -98,9 +125,9 @@ class Controller(Cmd):
 
     def _read_spellchecker_command(self, error, phrase):
         '''Correct an error
-        
-        This is a moderatly ugly bit of case switch code in python.
-        
+
+        This is a moderately ugly bit of case switch code in python.
+
         :returns: Tuple of bools (Continue checking, Word Modified)
         '''
 
@@ -108,8 +135,8 @@ class Controller(Cmd):
         while True:
             print >> self.stdout, "CHECKING: ", phrase
             print >> self.stdout, "ERROR:", error.word
-            #TODO: Reformat this so people know it's 0-indexed
             print >> self.stdout, "HOW ABOUT:"
+            # Replace the word one time with the selected index
             for idx in xrange(0, len(suggs)):
                 print >> self.stdout, '%d) %s' % (idx, suggs[idx])
             cmd = raw_input(">> ")
@@ -119,12 +146,15 @@ class Controller(Cmd):
                 if repl >= len(suggs):
                     print >> self.stdout, "No suggestion number", repl
                     continue
-                print >> self.stdout, "Replacing '%s' with '%s'" % (error.word, suggs[repl])
+                print >> self.stdout, "Replacing '%s' with '%s'" % (
+                                                    error.word, suggs[repl])
                 error.replace(suggs[repl])
                 return (True, True)
+            # ALWAYS replace the word with the selected index
             elif cmd[0] == "R":
                 if not cmd[1:].isdigit():
-                    print >> self.stdout, "Badly formatted command (try 'help')"
+                    print >> self.stdout, ("Badly formatted command "
+                                           "(try 'help')")
                     continue
                 repl = int(cmd[1:])
                 if repl >= len(suggs):
@@ -132,24 +162,31 @@ class Controller(Cmd):
                     continue
                 error.replace_always(suggs[repl])
                 return (True, True)
+            # Ignore this word
             elif cmd == "i":
                 return (True, False)
+            # ALWAYS ignore this word
             elif cmd == "I":
                 error.ignore_always()
                 return (True, False)
+            # Add the word to the dictionary
             elif cmd == "a":
                 error.add()
                 return (True, False)
+            # Edit the word directly
             elif cmd == "e":
                 repl = raw_input("New Word: ")
                 error.replace(repl.strip())
                 #TODO: Check word that's being swapped in
                 return (True, True)
+            # Quit checking this field in this photo
             elif cmd == "q":
                 return (False, False)
+            # Output the help docs
             elif "help".startswith(cmd.lower()):
                 self._spellchecker_help()
                 continue
+            # Invalid command
             else:
                 print >> self.stdout, "Badly formatted command (try 'help')"
                 continue
@@ -158,10 +195,14 @@ class Controller(Cmd):
         return True
 
 
-if __name__ == '__main__':
+def main():
+    import enchant
     from enchant.checker import SpellChecker
 
-    speller = SpellChecker('en_US')
+    speller = SpellChecker(lang=enchant.DictWithPWL("en_US"))
     ctrl = Controller(flickr=flickr.Flickr(),
                       speller=speller)
     ctrl.cmdloop()
+
+if __name__ == '__main__':
+    main()

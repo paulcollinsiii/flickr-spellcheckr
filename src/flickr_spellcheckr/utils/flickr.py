@@ -1,20 +1,24 @@
-'''Module to handle all the query nastiness and pagingation with flickr
+# -*- coding: UTF-8 -*-
+
+'''
+flickr_spellcheckr.utils.flickr
+===============================
+
+Module to handle all the query nastiness and pagination with flickr
 '''
 
+import datetime
 import flickrapi
 import time
-import datetime
 
 APIKEY = 'b60fd0ba95f8c583d8ef513d060c68e8'
 APISECRET = '9479730e8bc2c49a'
 
-class SimplePhoto(object):
-    '''Easier to deal with Photo object from flickr
-    '''
 
+class SimplePhoto(object):
     def __init__(self, title, description, photo_id):
-        '''
-        
+        '''Easier to deal with Photo object from flickr
+
         :param title: Text of the photo title
         :param description: Text for the description
         :param photo_id: The photo ID
@@ -23,10 +27,11 @@ class SimplePhoto(object):
         self.title = title
         self.description = description
         self.photo_id = photo_id
-    
+
     def __unicode__(self):
-        return u'Title: %(title)s\nDescription: %(description)s' % self.__dict__
-    
+        return u'Title: %(title)s\nDescription: %(description)s' % (
+                                                            self.__dict__)
+
     def __str__(self):
         return 'Title: %(title)s\nDescription: %(description)s' % self.__dict__
 
@@ -34,7 +39,7 @@ class SimplePhoto(object):
 class Flickr(object):
     def __init__(self):
         '''Handle querying and iterating over resultant photo data
-        
+
         :ivar logged_in: Boolean for if we're logged into flickr
         :ivar _flickr: Instance of :obj:`flickrapi`
         '''
@@ -44,10 +49,10 @@ class Flickr(object):
 
     def login(self):
         '''Setup the :attr:`flickr` object and perform the login to flickr
-        
+
         It is safe to call this function several times. Subsequent calls have
         no effect.
-        
+
         :keyword get_token: If get_token_part_one succeeds, get the frob
         :return: True if fully logged in callable to finish login otherwise
         '''
@@ -64,10 +69,10 @@ class Flickr(object):
 
     def photos_iter(self, date_from=None, date_to=None):
         '''Return an iterator over flickr photos and handle all pagination
-        
+
         The search will only return photos owned by the logged in user.
         The photos objects returned will have their description attached.
-        
+
         :param date_from: The min date the photo was taken on
         :keyword date_to: The max date the photo was taken on. Default: now
         '''
@@ -97,25 +102,24 @@ class Flickr(object):
                                   description=children[0].text,
                                   photo_id=photo.attrib['id'])
         if date_from is None:
-            date_from = datetime.datetime.utcnow() - datetime.timedelta(days=40)
-        assert self.logged_in, 'Must be logged in to flickr to search own photos'
+            date_from = (datetime.datetime.utcnow()
+                         - datetime.timedelta(days=40))
+        assert self.logged_in, 'Must be logged in to flickr to search photos'
         search_args = {'min_taken_date': time.mktime(date_from.timetuple()),
                        'user_id': 'me',
-                       'extras': 'description',
-                       'per_page': 5}
+                       'extras': 'description'}
         if date_to is not None:
             search_args['max_taken_date'] = time.mktime(date_to.timetuple())
         resp = self._flickr.photos_search(**search_args)
         for simplephoto in simplephoto_iter(get_photos_element(resp)):
             yield simplephoto
-        #TODO: Renable multi page support
-#        if photos.attrib['pages'] != '1':
-#        for idx in xrange(2,int(photos.attrib['pages']) + 1):
-#            resp = self._flickr.photos_search(page=idx, **kwargs)
-#            photos = get_photos_element(resp)
+        if resp.attrib['pages'] != '1':
+            for idx in xrange(2, int(resp.attrib['pages']) + 1):
+                resp = self._flickr.photos_search(page=idx, **search_args)
+                for simplephoto in simplephoto_iter(get_photos_element(resp)):
+                    yield simplephoto
 
     def save_meta(self, photo):
         self._flickr.photos_setMeta(photo_id=photo.photo_id,
                                     title=photo.title,
                                     description=photo.description)
-

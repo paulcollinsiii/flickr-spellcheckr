@@ -1,4 +1,13 @@
-.pydevproject
-.project
 .settings/
 venv/
+build/
+dist/
+*.egg-info/
+
+.pydevproject
+.project
+
+*~
+*.swp
+
+/MANIFEST

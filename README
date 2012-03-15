@@ -1,0 +1,37 @@
+##################
+flickr-spellcheckr
+##################
+A command line utility to go and spell check the title and descriptions of
+your photos on flickr.
+
+
+Installing
+==========
+pip should be enough to get it installed
+
+    pip install flickr-spellcheckr
+
+
+Windows Users
+-------------
+There does not appear to be a simple way to install pyenchant. Please go to
+http://pypi.python.org/pypi/pyenchant/
+and download the egg for your platform and Python version. From there an
+
+    easy_install download.pychant.egg
+
+should be enough to make pip happy.
+
+
+Running
+=======
+The setup script creates a ``flickr-spellchekr`` command. Running that should
+put you in the command prompt interface for flickr-spellcheckr. Online help is
+available by typing help
+
+
+Thanks
+======
+A shoutout to PyCon 2012, for introducing me to awesome tools. cmd.py is
+pretty slick.
+

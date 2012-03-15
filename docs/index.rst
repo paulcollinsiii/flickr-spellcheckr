@@ -1,17 +1,19 @@
-.. flickr-spellcheckr documentation master file, created by
-   sphinx-quickstart on Tue Mar 13 17:38:56 2012.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
-Welcome to flickr-spellcheckr's documentation!
-==============================================
-
-Contents:
+.. include:: ../README
 
 .. toctree::
-   :maxdepth: 2
+    :maxdepth: 1
+    :hidden:
+    :glob:
 
+    user/*
 
+API Docuemntation
+=================
+
+.. toctree::
+    :maxdepth: 1
+
+    api/modules
 
 Indices and tables
 ==================

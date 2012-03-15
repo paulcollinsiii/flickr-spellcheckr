@@ -1,11 +1,15 @@
+# -*- coding: UTF-8 -*-
+
 '''Unit tests for mock_flickr-spellchk
 '''
 
-import unittest
-import mock
+from enchant.checker import SpellChecker
 from flickr_spellcheckr import controller
 from flickr_spellcheckr.utils import flickr
-from enchant.checker import SpellChecker
+import enchant
+import mock
+import unittest
+
 
 class TestBasicController(unittest.TestCase):
 
@@ -17,94 +21,136 @@ class TestBasicController(unittest.TestCase):
         self.mock_flickr = None
         self.mock_speller = None
 
-
-    def testNoPhoto(self):
+    def test_no_photo(self):
         self.mock_flickr.login.return_value = True
         self.mock_flickr.photos_iter.return_value = iter([])
         ctrl = controller.Controller(flickr=self.mock_flickr,
                                      speller=self.mock_speller)
         ctrl.do_spellcheck('')
         self.mock_flickr.login.assert_called_with()
-        assert self.mock_flickr.photos_iter.called, 'Never tried to iter photos'
+        assert self.mock_flickr.photos_iter.called, 'Never iterated photos'
 
-    def testOnePhotoNoErors(self):
-        photo = mock.Mock(spec=flickr.SimplePhoto, title='test', description='test')
+    def test_one_photo_no_errors(self):
+        photo = mock.Mock(spec=flickr.SimplePhoto, title='test',
+                          description='test')
         self.mock_flickr.login.return_value = True
         self.mock_flickr.photos_iter.return_value = iter([photo])
         self.mock_speller.return_value = iter([])
         ctrl = controller.Controller(flickr=self.mock_flickr,
                                      speller=self.mock_speller)
         ctrl.do_spellcheck('')
-        assert self.mock_speller.__iter__.call_count == 2, 'Missed checking a field'
+        self.assertEqual(self.mock_speller.__iter__.call_count, 2,
+                         'Failed to check all fields')
 
 
 class TestBasicSpelling(unittest.TestCase):
 
     def setUp(self):
         self.mock_flickr = mock.Mock(spec=flickr.Flickr)
+        self.mock_flickr.login.return_value = True
         self.mock_speller = mock.MagicMock(spec=SpellChecker)
-        self.real_speller = SpellChecker('en_US')
+        self.real_speller = SpellChecker(lang=enchant.DictWithPWL("en_US"))
+        self.photo = mock.Mock(spec=flickr.SimplePhoto, title='Speling eror',
+                     description='')
+        self.mock_flickr.photos_iter.return_value = iter([self.photo])
 
     def tearDown(self):
         self.mock_flickr = None
         self.mock_speller = None
+        self.photo = None
 
-    def onePhotoTwoErrorSetup(self):
-        photo = mock.Mock(spec=flickr.SimplePhoto, title='Speling eror',
-                     description='')
-        self.mock_flickr.login.return_value = True
-        self.mock_flickr.photos_iter.return_value = iter([photo])
-        return photo
-
-    def testOnePhotoTwoeErrorIgnored(self):
-        photo = self.onePhotoTwoErrorSetup()
-        orig_text = photo.title[:]
+    def test_errors_ignored(self):
+        orig_text = self.photo.title[:]
         with mock.patch('__builtin__.raw_input') as mockraw:
             ctrl = controller.Controller(flickr=self.mock_flickr,
                                          speller=self.real_speller)
             mockraw.return_value = 'i'
             ctrl.do_spellcheck('')
-        self.assertEqual(orig_text, photo.title)
+        self.assertEqual(orig_text, self.photo.title)
 
-    def testOnePhotoTwoErrorQuit(self):
-        photo = mock.Mock(spec=flickr.SimplePhoto,
-                          title='Speling eror abound in ths',
-                          description='')
-        self.mock_flickr.login.return_value = True
-        self.mock_flickr.photos_iter.return_value = iter([photo])
-        orig_text = photo.title[:]
+    def test_quit_has_no_text_change(self):
+        orig_text = self.photo.title[:]
         with mock.patch('__builtin__.raw_input') as mockraw:
             ctrl = controller.Controller(flickr=self.mock_flickr,
                                          speller=self.real_speller)
             results = ['q']
             mockraw.side_effect = lambda *args: results.pop(0)
             ctrl.do_spellcheck('')
-        self.assertEqual(orig_text, photo.title)
-        # No changes means no updates pending
+        self.assertEqual(orig_text, self.photo.title)
+
+    def test_quit_has_empty_save_queue(self):
+        with mock.patch('__builtin__.raw_input') as mockraw:
+            ctrl = controller.Controller(flickr=self.mock_flickr,
+                                         speller=self.real_speller)
+            results = ['q']
+            mockraw.side_effect = lambda *args: results.pop(0)
+            ctrl.do_spellcheck('')
         self.assertEqual(len(ctrl.photos), 0)
 
-    def testOnePhotoTwoErrorOneReplaced(self):
-        photo = self.onePhotoTwoErrorSetup()
-        orig_text = photo.title[:]
+    def test_edit_error_output(self):
+        with mock.patch('__builtin__.raw_input') as mockraw:
+            ctrl = controller.Controller(flickr=self.mock_flickr,
+                                         speller=self.real_speller)
+            results = ['e', 'Spellingg', 'i', ]
+            mockraw.side_effect = lambda *args: results.pop(0)
+            ctrl.do_spellcheck('')
+        self.assertEqual('Spellingg eror', self.photo.title)
+
+    def test_replace_one(self):
         with mock.patch('__builtin__.raw_input') as mockraw:
             ctrl = controller.Controller(flickr=self.mock_flickr,
                                          speller=self.real_speller)
             results = ['1', 'i']
             mockraw.side_effect = lambda *args: results.pop(0)
             ctrl.do_spellcheck('')
-        self.assertNotEqual(orig_text, photo.title)
-        self.assertEqual('Spelling eror', photo.title)
+        self.assertEqual('Spelling eror', self.photo.title)
 
-    def testOnePhotoTwoErrorTwoReplaced(self):
-        photo = self.onePhotoTwoErrorSetup()
-        orig_text = photo.title[:]
+    def test_replace_both(self):
         with mock.patch('__builtin__.raw_input') as mockraw:
             ctrl = controller.Controller(flickr=self.mock_flickr,
                                          speller=self.real_speller)
             mockraw.return_value = '1'
             ctrl.do_spellcheck('')
-        self.assertNotEqual(orig_text, photo.title)
-        self.assertEqual('Spelling error', photo.title)
+        self.assertEqual('Spelling error', self.photo.title)
+
+    def test_replace_always(self):
+        self.photo = mock.Mock(spec=flickr.SimplePhoto,
+                   title='speling errors means speling failures',
+                   description='')
+        self.mock_flickr.photos_iter.return_value = iter([self.photo])
+        with mock.patch('__builtin__.raw_input') as mockraw:
+            ctrl = controller.Controller(flickr=self.mock_flickr,
+                                         speller=self.real_speller)
+            mockraw.return_value = 'R1'
+            ctrl.do_spellcheck('')
+        self.assertEqual('spelling errors means spelling failures',
+                         self.photo.title)
+
+    def test_add_to_personal_dict_callcount(self):
+        self.photo = mock.Mock(spec=flickr.SimplePhoto,
+                   title='speling errors means speling failures',
+                   description='')
+        self.mock_flickr.photos_iter.return_value = iter([self.photo])
+        with mock.patch('__builtin__.raw_input') as mockraw:
+            ctrl = controller.Controller(flickr=self.mock_flickr,
+                                         speller=self.real_speller)
+            mockraw.return_value = 'a'
+            ctrl.do_spellcheck('')
+            self.assertEqual(mockraw.call_count, 1, 'Too many adds')
+
+    def test_add_to_personal_dict_text(self):
+        self.photo = mock.Mock(spec=flickr.SimplePhoto,
+                   title='speling errors means speling failures',
+                   description='')
+        self.mock_flickr.photos_iter.return_value = iter([self.photo])
+        orig_text = self.photo.title[:]
+        with mock.patch('__builtin__.raw_input') as mockraw:
+            ctrl = controller.Controller(flickr=self.mock_flickr,
+                                         speller=self.real_speller)
+            mockraw.return_value = 'a'
+            ctrl.do_spellcheck('')
+        self.assertEqual(orig_text, self.photo.title)
+
 
 class TestBasicSaving(unittest.TestCase):
 
