@@ -8,7 +8,7 @@ setup(name='flickr-spellcheckr',
       description='Commandline spellchecker for flickr photos',
       author='Paul Collins',
       author_email='paul.collins.iii@gmail.com',
-      license='GPL3',
+      license='BSD',
       classifiers=['Development Status :: 3 - Alpha',
                    'Environment :: Console',
                    'Intended Audience :: Developers',
@@ -30,5 +30,6 @@ setup(name='flickr-spellcheckr',
             ]
         },
       test_suite='nose.colletor',
-      tests_require=['nose', 'mock']
+      tests_require=['nose', 'mock'],
+      url='https://github.com/paulcollinsiii/flickr-spellcheckr'
       )
