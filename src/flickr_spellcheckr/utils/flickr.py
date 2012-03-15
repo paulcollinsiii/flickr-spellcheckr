@@ -111,10 +111,11 @@ class Flickr(object):
         if date_to is not None:
             search_args['max_taken_date'] = time.mktime(date_to.timetuple())
         resp = self._flickr.photos_search(**search_args)
-        for simplephoto in simplephoto_iter(get_photos_element(resp)):
+        photos = get_photos_element(resp)
+        for simplephoto in simplephoto_iter(photos):
             yield simplephoto
-        if resp.attrib['pages'] != '1':
-            for idx in xrange(2, int(resp.attrib['pages']) + 1):
+        if photos.attrib['pages'] != '1':
+            for idx in xrange(2, int(photos.attrib['pages']) + 1):
                 resp = self._flickr.photos_search(page=idx, **search_args)
                 for simplephoto in simplephoto_iter(get_photos_element(resp)):
                     yield simplephoto

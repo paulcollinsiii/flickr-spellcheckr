@@ -51,6 +51,9 @@ class Controller(Cmd):
                                              date_to=date_to):
             save_photo = False  # Track if we have modified a photo at all
             for key in ('title', 'description'):
+                # pyenchant doesn't like having set_text(None) called...
+                if getattr(photo, key) is None:
+                    continue
                 self.speller.set_text(getattr(photo, key))
                 for err in self.speller:
                     keep_going, updated = (self

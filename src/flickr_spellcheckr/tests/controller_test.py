@@ -51,7 +51,7 @@ class TestBasicSpelling(unittest.TestCase):
         self.mock_speller = mock.MagicMock(spec=SpellChecker)
         self.real_speller = SpellChecker(lang=enchant.DictWithPWL("en_US"))
         self.photo = mock.Mock(spec=flickr.SimplePhoto, title='Speling eror',
-                     description='')
+                     description=None)
         self.mock_flickr.photos_iter.return_value = iter([self.photo])
 
     def tearDown(self):
