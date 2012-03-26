@@ -11,6 +11,8 @@ a fairly basic command line interface.
 from cmd import Cmd
 from flickr_spellcheckr.utils import flickr
 import datetime
+import sys
+import os
 
 
 class Controller(Cmd):
@@ -198,13 +200,19 @@ class Controller(Cmd):
         return True
 
 
+def get_local_settings():
+    if sys.platform == 'win32':
+        return os.path.join(os.getenv('APPDATA'), 'flickr-spellcheckr.dat')
+    return os.path.join(os.path.expanduser("~"), '.flickr-spellcheckr')
+
+
 def main():
     import enchant
     from enchant.checker import SpellChecker
 
-    speller = SpellChecker(lang=enchant.DictWithPWL("en_US"))
-    ctrl = Controller(flickr=flickr.Flickr(),
-                      speller=speller)
+    speller = SpellChecker(lang=enchant.DictWithPWL("en_US",
+                                                    pwl=get_local_settings()))
+    ctrl = Controller(flickr=flickr.Flickr(), speller=speller)
     ctrl.cmdloop()
 
 if __name__ == '__main__':
