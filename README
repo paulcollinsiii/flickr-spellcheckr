@@ -4,6 +4,8 @@ flickr-spellcheckr
 A command line utility to go and spell check the title and descriptions of
 your photos on flickr.
 
+Full docs are hosted on Read the Docs http://flickr-spellcheckr.readthedocs.org/
+
 
 Installing
 ==========

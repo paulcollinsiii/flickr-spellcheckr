@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 
 setup(name='flickr-spellcheckr',
-      version='0.1.0',
+      version='0.2.0',
       description='Commandline spellchecker for flickr photos',
       author='Paul Collins',
       author_email='paul.collins.iii@gmail.com',
