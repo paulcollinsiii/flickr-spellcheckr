@@ -56,6 +56,7 @@ class Flickr(object):
         :keyword get_token: If get_token_part_one succeeds, get the frob
         :return: True if fully logged in callable to finish login otherwise
         '''
+
         def finish_login():
             self._flickr.get_token_part_two((token, frob))
             self.logged_in = True
@@ -121,6 +122,10 @@ class Flickr(object):
                     yield simplephoto
 
     def save_meta(self, photo):
+        '''Save the title and description fields of a photo to Flickr
+
+        :param photo: :obj:`SimplePhoto` object to save to Flickr
+        '''
         self._flickr.photos_setMeta(photo_id=photo.photo_id,
                                     title=photo.title,
                                     description=photo.description)
