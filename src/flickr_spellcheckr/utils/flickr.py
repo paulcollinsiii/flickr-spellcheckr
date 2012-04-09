@@ -124,3 +124,15 @@ class Flickr(object):
         self._flickr.photos_setMeta(photo_id=photo.photo_id,
                                     title=photo.title,
                                     description=photo.description)
+
+    def tag_list(self):
+        '''Return an iterator of the tags the user has
+        '''
+
+        resp = self._flickr.tags_getListUser()
+        tags = resp.getchildren()[0]
+        assert tags.tag == 'who'
+        tags = tags.getchildren()[0]
+        assert tags.tag == 'tags'
+        for tag in tags.getiterator():
+            yield tag.text

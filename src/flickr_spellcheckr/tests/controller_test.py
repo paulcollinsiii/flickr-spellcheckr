@@ -151,6 +151,43 @@ class TestBasicSpelling(unittest.TestCase):
             ctrl.do_spellcheck('')
         self.assertEqual(orig_text, self.photo.title)
 
+    def test_spellcheck_tag_text(self):
+        self.mock_flickr.tag_list.return_value = iter(['good', 'badspell'])
+        with mock.patch('__builtin__.raw_input') as mockraw:
+            ctrl = controller.Controller(flickr=self.mock_flickr,
+                                         speller=self.real_speller)
+            mockraw.return_value = 'i'
+            ctrl.do_spellchecktags('')
+            self.assertEqual(mockraw.call_count, 1, 'Too many adds')
+
+    def test_spellcheck_tag_text_updates(self):
+        self.mock_flickr.tag_list.return_value = iter(['good', 'badspell'])
+        with mock.patch('__builtin__.raw_input') as mockraw:
+            ctrl = controller.Controller(flickr=self.mock_flickr,
+                                         speller=self.real_speller)
+            mockraw.return_value = 'i'
+            ctrl.do_spellchecktags('')
+            self.assertEqual(mockraw.call_count, 1, 'Too many adds')
+
+    def test_spellcheck_tag_text_check_ignored_list(self):
+        self.mock_flickr.tag_list.return_value = iter(['good', 'badspell'])
+        with mock.patch('__builtin__.raw_input') as mockraw:
+            ctrl = controller.Controller(flickr=self.mock_flickr,
+                                         speller=self.real_speller)
+            mockraw.return_value = 'i'
+            to_update = ctrl.do_spellchecktags('')
+            self.assertEqual([], to_update, 'Ignored errors in list')
+
+    def test_spellcheck_tag_text_check_replaced_list(self):
+        self.mock_flickr.tag_list.return_value = iter(['good', 'badspell'])
+        with mock.patch('__builtin__.raw_input') as mockraw:
+            ctrl = controller.Controller(flickr=self.mock_flickr,
+                                         speller=self.real_speller)
+            mockraw.return_value = '0'
+            to_update = ctrl.do_spellchecktags('')
+            self.assertEqual([('badspell', 'bad spell')], to_update,
+                             'Ignored errors in list')
+
 
 class TestBasicSaving(unittest.TestCase):
 

@@ -15,6 +15,24 @@ import sys
 import os
 
 
+class SpellcheckerCommandResult(object):
+    def __init__(self, err, err_word, err_replacement, updated, carryon):
+        '''Key value map for _read_spellchecker_command
+
+        :param err: Spellchecker error object
+        :param err_word: Word that caused the error
+        :param err_replacement: What the word was replaced with
+        :param updated: If the word was ignored
+        :param carryon: If quit has been signaled
+        '''
+
+        self.err = err
+        self.err_word = err_word
+        self.err_replacement = err_replacement
+        self.updated = updated
+        self.carryon = carryon
+
+
 class Controller(Cmd):
 
     def __init__(self, speller, flickr, completekey='tab', stdin=None,
@@ -32,44 +50,8 @@ class Controller(Cmd):
         self.photos = []
         Cmd.__init__(self, completekey=completekey, stdin=stdin, stdout=stdout)
 
-    def correct_photos(self, date_from=None, date_to=None):
-        '''Return a list of photos with the spelling corrected
-
-        :keyword date_from: The :obj:`datetime.datetime` to search from
-        :keyword date_to: The :obj:`datetime.datetime` to search to
-        :returns: List of :obj:`~flickr_spellchecker.utils.flickr.SimplePhoto`
-            objects that have been edited
-        '''
-
-        print >> self.stdout, "Logging into flickr..."
-        logged_in = self.flickr.login()
-        if callable(logged_in):
-            # Not really logged in, must wait then finish login
-            raw_input('Press enter when finished authorizing app')
-            logged_in()
-        print >> self.stdout, "Searching for photos..."
-        corrected_photos = []
-        for photo in self.flickr.photos_iter(date_from=date_from,
-                                             date_to=date_to):
-            save_photo = False  # Track if we have modified a photo at all
-            for key in ('title', 'description'):
-                # pyenchant doesn't like having set_text(None) called...
-                if getattr(photo, key) is None:
-                    continue
-                self.speller.set_text(getattr(photo, key))
-                for err in self.speller:
-                    keep_going, updated = (self
-                       ._read_spellchecker_command(err, getattr(photo, key)))
-                    save_photo |= updated  # Binary or with updated (save true)
-                    if not keep_going:  # Stop if the user says 'q'
-                        break
-                # Save the updated text from this key after checking for errors
-                if save_photo:
-                    setattr(photo, key, self.speller.get_text())
-            # Only append the photo to the corrected_photos queue once
-            if save_photo:
-                corrected_photos.append(photo)
-        return corrected_photos
+    def do_EOF(self, line):
+        return True
 
     def do_showchanges(self, _ignored):
         '''Show the list of photos that need to be saved to Flickr
@@ -111,22 +93,87 @@ class Controller(Cmd):
             return
         # 2) Then call someone else to do the spell checking on each photo
         # and then save that list of corrected photos
-        self.photos.extend(self.correct_photos(*date_range))
+        self._flicker_login()
+        self.photos.extend(self._correct_photos(*date_range))
 
-    def _spellchecker_help(self):
-        '''Just prints out the help text for using the spelling corrector
+    def do_spellchecktags(self, _ignored):
+        '''spellchecktags
+
+        Get the full list of tags and spellcheck the individual tags.
+        Note this does not actually update the tags in flickr, it is for
+        information only. The reason is the flickr API does not provide an easy
+        method to rename a tag, instead it must be done through the web
+        interface.
         '''
 
-        print >> self.stdout, '\n'.join((
-           "0..N:    replace with the numbered suggestion",
-           "R0..rN:  always replace with the numbered suggestion",
-           "i:       ignore this wordv",
-           "I:       always ignore this word",
-           "a:       add word to personal dictionary (only for this session)",
-           "e:       edit the word",
-           "q:       quit checking",
-           "h:       print this help message",
-           "----------------------------------------------------"))
+        self._flicker_login()
+        tags_to_update = self._get_tags_to_correct()
+        # [(err, correction), ...] --> "err --> correction\n"
+        print >> self.stdout, "Tags to update:\n{0}".format(
+                '\n'.join(map(lambda tag: ' --> '.join(tag), tags_to_update)))
+
+    def _correct_photos(self, date_from=None, date_to=None):
+        '''Return a list of photos with the spelling corrected
+
+        :keyword date_from: The :obj:`datetime.datetime` to search from
+        :keyword date_to: The :obj:`datetime.datetime` to search to
+        :returns: List of :obj:`~flickr_spellchecker.utils.flickr.SimplePhoto`
+            objects that have been edited
+        '''
+
+        print >> self.stdout, "Searching for photos..."
+        corrected_photos = []
+        for photo in self.flickr.photos_iter(date_from=date_from,
+                                             date_to=date_to):
+            save_photo = False  # Track if we have modified a photo at all
+            for key in ('title', 'description'):
+                # pyenchant doesn't like having set_text(None) called...
+                if getattr(photo, key) is None:
+                    continue
+                self.speller.set_text(getattr(photo, key))
+                for err in self.speller:
+                    result = (self
+                       ._read_spellchecker_command(err, getattr(photo, key)))
+                    save_photo |= result.updated  # Binary or (save true)
+                    if not result.carryon:  # Stop if the user says 'q'
+                        break
+                # Save the updated text from this key after checking for errors
+                if save_photo:
+                    setattr(photo, key, self.speller.get_text())
+            # Only append the photo to the corrected_photos queue once
+            if save_photo:
+                corrected_photos.append(photo)
+        return corrected_photos
+
+    def _flicker_login(self):
+        '''Log into flickr and get the auth tokens.
+        '''
+
+        print >> self.stdout, "Logging into flickr..."
+        logged_in = self.flickr.login()
+        if callable(logged_in):
+            # Not really logged in, must wait then finish login
+            raw_input('Press enter when finished authorizing app')
+            logged_in()
+
+    def _get_tags_to_correct(self):
+        '''Return a list of tags to correct
+
+        :returns: [(original, corrected), ...] tag names
+        '''
+
+        print >> self.stdout, "Searching for tags..."
+        self.speller.set_text(' '.join(self.flickr.tag_list()))
+        print >> self.stdout, "Spellchecking tags..."
+        tags_to_update = []
+        for err in self.speller:
+            result = (self._read_spellchecker_command(err,
+                                                                   err.word))
+            if not result.carryon:  # Stop if the user says 'q'
+                break
+            if result.updated:
+                tags_to_update.append((result.err_word, result.err_replacement))
+        return tags_to_update
 
     def _read_spellchecker_command(self, error, phrase):
         '''Correct an error
@@ -154,7 +201,9 @@ class Controller(Cmd):
                 print >> self.stdout, "Replacing '%s' with '%s'" % (
                                                     error.word, suggs[repl])
                 error.replace(suggs[repl])
-                return (True, True)
+                return SpellcheckerCommandResult(error, error.word,
+                                                 suggs[repl], updated=True,
+                                                 carryon=True)
             # ALWAYS replace the word with the selected index
             elif cmd[0] == "R":
                 if not cmd[1:].isdigit():
@@ -166,27 +215,35 @@ class Controller(Cmd):
                     print >> self.stdout, "No suggestion number", repl
                     continue
                 error.replace_always(suggs[repl])
-                return (True, True)
+                return SpellcheckerCommandResult(error, error.word,
+                                                 suggs[repl], updated=True,
+                                                 carryon=True)
             # Ignore this word
             elif cmd == "i":
-                return (True, False)
+                return SpellcheckerCommandResult(error, error.word, None,
+                                                 updated=False, carryon=True)
             # ALWAYS ignore this word
             elif cmd == "I":
                 error.ignore_always()
-                return (True, False)
+                return SpellcheckerCommandResult(error, error.word, None,
+                                                 updated=False, carryon=True)
             # Add the word to the dictionary
             elif cmd == "a":
                 error.add()
-                return (True, False)
+                return SpellcheckerCommandResult(error, error.word, None,
+                                                 updated=False, carryon=True)
             # Edit the word directly
             elif cmd == "e":
                 repl = raw_input("New Word: ")
-                error.replace(repl.strip())
+                repl = repl.strip()
+                error.replace(repl)
                 #TODO: Check word that's being swapped in
-                return (True, True)
+                return SpellcheckerCommandResult(error, error.word, repl,
+                                                 updated=True, carryon=True)
             # Quit checking this field in this photo
             elif cmd == "q":
-                return (False, False)
+                return SpellcheckerCommandResult(error, error.word, None,
+                                                 updated=False, carryon=False)
             # Output the help docs
             elif "help".startswith(cmd.lower()):
                 self._spellchecker_help()
@@ -196,8 +253,20 @@ class Controller(Cmd):
                 print >> self.stdout, "Badly formatted command (try 'help')"
                 continue
 
-    def do_EOF(self, line):
-        return True
+    def _spellchecker_help(self):
+        '''Just prints out the help text for using the spelling corrector
+        '''
+
+        print >> self.stdout, '\n'.join((
+           "0..N:    replace with the numbered suggestion",
+           "R0..rN:  always replace with the numbered suggestion",
+           "i:       ignore this wordv",
+           "I:       always ignore this word",
+           "a:       add word to personal dictionary (only for this session)",
+           "e:       edit the word",
+           "q:       quit checking",
+           "h:       print this help message",
+           "----------------------------------------------------"))
 
 
 def get_local_settings():
